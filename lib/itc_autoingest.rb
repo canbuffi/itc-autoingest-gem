@@ -23,7 +23,8 @@ module ITCAutoingest
             (class << self; self; end).class_eval {
               define_method("#{timeframe.downcase}_#{report_type.downcase}_#{report_sub_type.sub('-', '').downcase}_report") { |*args|
                 reportdate = (args.length == 0 ? (Time.now - 86400).strftime('%Y%m%d') : args[0])
-                self.send('ingest', report_type, timeframe, report_sub_type, reportdate)
+                responsetype = (args.length < 2 ? nil : args[1])
+                self.send('ingest', report_type, timeframe, report_sub_type, reportdate, responsetype)
               }
             }
           }
@@ -33,7 +34,7 @@ module ITCAutoingest
 
     private
 
-    def ingest(typeofreport, datetype, reporttype, reportdate)
+    def ingest(typeofreport, datetype, reporttype, reportdate, responsetype = :hash)
       query = { :TYPEOFREPORT => typeofreport, :DATETYPE => datetype, :REPORTTYPE => reporttype, :REPORTDATE => reportdate }
       query.merge!(@auth)
 
@@ -44,12 +45,25 @@ module ITCAutoingest
       elsif !response.headers['ERRORMSG'].nil?
         {:error => response.headers['ERRORMSG']}
       else
+        if responsetype == :raw
+          return raw_response(response.body)
+        end
+        
         hash_response(response.body)
       end
     end
+    
+    def raw_data(body)
+      Zlib::GzipReader.new(StringIO.new(body)).read
+    end
+    
+    def raw_response(body)
+      raw_data = raw_data(body)
+      { :report => raw_data }
+    end
 
     def hash_response(body)
-      raw_data = Zlib::GzipReader.new(StringIO.new(body)).read
+      raw_data = raw_data(body)
 
       csv_data = CSV.parse(raw_data, {:col_sep => "\t"})
 
