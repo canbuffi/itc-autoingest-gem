@@ -45,31 +45,31 @@ module ITCAutoingest
       elsif !response.headers['ERRORMSG'].nil?
         {:error => response.headers['ERRORMSG']}
       else
+        report = {}
+        report[:filename] = response.headers['filename']
+        
         if responsetype == :raw
-          return raw_response(response.body)
+          report[:report] = raw_response(response)
+        elsif responsetype == :hash
+          report[:report] = hash_response(response)
         end
         
-        hash_response(response.body)
+        return report
       end
     end
     
-    def raw_data(body)
-      Zlib::GzipReader.new(StringIO.new(body)).read
-    end
-    
-    def raw_response(body)
-      raw_data = raw_data(body)
-      { :report => raw_data }
+    def raw_response(response)
+      Zlib::GzipReader.new(StringIO.new(response.body)).read
     end
 
-    def hash_response(body)
-      raw_data = raw_data(body)
+    def hash_response(response)
+      raw_data = raw_response(response)
 
       csv_data = CSV.parse(raw_data, {:col_sep => "\t"})
 
       headers = csv_data.shift.map {|i| i.to_s }
       string_data = csv_data.map {|row| row.map {|cell| cell.to_s } }
-      { :report => string_data.map {|row| Hash[*headers.zip(row).flatten] } }
+      string_data.map {|row| Hash[*headers.zip(row).flatten] }
     end
   end
 end
